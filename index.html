@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maplestory Bossing Scheduler</title>
+    <style>
+        :root {
+            --primary: #4a348c; /* Darker purple for better contrast */
+            --secondary: #f5d04c;
+            --dark: #333;
+            --light: #f9f9f9;
+            --success: #4caf50;
+            --danger: #f44336;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--light);
+            color: var(--dark);
+        }
+        
+        header {
+            background-color: var(--primary);
+            color: white;
+            text-align: center;
+            padding: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+        }
+        
+        h1 {
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 1rem;
+            border-bottom: 3px solid transparent;
+            color: #555555;
+            font-weight: 500;
+        }
+        
+        .tab.active {
+            border-bottom: 3px solid var(--primary);
+            color: #000000;
+            font-weight: bold;
+            background-color: rgba(74, 52, 140, 0.1);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #553c85;
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+        }
+        
+        .btn-danger:hover {
+            background-color: #d32f2f;
+        }
+        
+        .availability-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(7, 1fr);
+            gap: 3px;
+            margin: 1rem 0;
+            font-size: 0.85rem;
+        }
+        
+        .grid-header, .grid-time, .grid-cell {
+            padding: 8px;
+            text-align: center;
+            border-radius: 4px;
+        }
+        
+        .grid-header {
+            background-color: var(--primary);
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+        }
+        
+        .grid-time {
+            background-color: var(--primary);
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.5);
+        }
+        
+        .grid-cell {
+            background-color: #e9e9e9;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            position: relative;
+            overflow: visible;
+        }
+        
+        .grid-cell:hover {
+            background-color: #d5d5d5;
+            z-index: 50;
+        }
+        
+        .grid-cell.selected {
+            background-color: var(--secondary);
+        }
+        
+        .tooltip {
+            display: none;
+            position: absolute;
+            top: -70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            z-index: 100;
+            width: max-content;
+            min-width: 120px;
+            max-width: 250px;
+            font-size: 0.85rem;
+            color: var(--dark);
+            text-align: left;
+            white-space: normal;
+            pointer-events: none;
+        }
+        
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #fff transparent transparent transparent;
+        }
+        
+        .grid-cell:hover .tooltip {
+            display: block;
+        }
+        
+        .tooltip.visible {
+            display: block;
+        }
+        
+        .grid-cell:hover .tooltip {
+            display: block;
+        }
+        
+        .member-list {
+            margin-top: 1rem;
+        }
+        
+        .member {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            margin-bottom: 0.5rem;
+            background-color: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        .result-grid {
+            margin-top: 1rem;
+        }
+        
+        .heat-0 { background-color: #e9e9e9; }
+        .heat-1 { background-color: #ffeecc; }
+        .heat-2 { background-color: #ffdd99; }
+        .heat-3 { background-color: #ffcc66; }
+        .heat-4 { background-color: #ffbb33; }
+        .heat-5 { background-color: #ffaa00; }
+        .heat-max { background-color: var(--secondary); font-weight: bold; }
+        
+        .legend {
+            display: flex;
+            gap: 10px;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        
+        .export-options {
+            margin-top: 1rem;
+        }
+        
+        .export-btn {
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .availability-grid {
+                grid-template-columns: 60px repeat(7, 1fr);
+                font-size: 0.7rem;
+                gap: 2px;
+            }
+            
+            .grid-header, .grid-time, .grid-cell {
+                padding: 3px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Maplestory Bossing Scheduler</h1>
+    </header>
+    
+    <div class="container">
+        <div class="tabs">
+            <button class="tab active" data-tab="setup">Group Setup</button>
+            <button class="tab" data-tab="availability">Your Availability</button>
+            <button class="tab" data-tab="results">Combined Results</button>
+        </div>
+        
+        <div class="tab-content active" id="setup">
+            <div class="card">
+                <h2>Group Setup</h2>
+                <div class="form-group">
+                    <label for="group-name">Group Name</label>
+                    <input type="text" id="group-name" placeholder="Enter your bossing group name">
+                </div>
+                <div class="form-group">
+                    <label for="your-name">Your Name/Character</label>
+                    <input type="text" id="your-name" placeholder="Enter your name or character name">
+                </div>
+                <button id="save-group">Save Group Info</button>
+            </div>
+            
+            <div class="card">
+                <h2>Group Members</h2>
+                <div class="form-group">
+                    <label for="new-member">Add Group Member</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="new-member" placeholder="Enter member name or character">
+                        <button id="add-member" style="width: auto;">Add</button>
+                    </div>
+                </div>
+                <div class="member-list" id="member-list">
+                    <!-- Members will be added here dynamically -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="availability">
+            <div class="card">
+                <h2>Your Weekly Availability</h2>
+                <p>Select the time slots when you're available for bossing:</p>
+                
+                <div class="availability-grid" id="availability-grid">
+                    <div class="grid-header"></div>
+                    <div class="grid-header">Monday</div>
+                    <div class="grid-header">Tuesday</div>
+                    <div class="grid-header">Wednesday</div>
+                    <div class="grid-header">Thursday</div>
+                    <div class="grid-header">Friday</div>
+                    <div class="grid-header">Saturday</div>
+                    <div class="grid-header">Sunday</div>
+                    
+                    <!-- Time slots will be added here dynamically -->
+                </div>
+                
+                <div class="form-group">
+                    <label for="timezone-select">Your Timezone</label>
+                    <select id="timezone-select">
+                        <option value="-12">UTC-12:00</option>
+                        <option value="-11">UTC-11:00</option>
+                        <option value="-10">UTC-10:00</option>
+                        <option value="-9">UTC-09:00</option>
+                        <option value="-8">UTC-08:00 (PST)</option>
+                        <option value="-7">UTC-07:00 (PDT)</option>
+                        <option value="-6">UTC-06:00 (CST)</option>
+                        <option value="-5">UTC-05:00 (EST)</option>
+                        <option value="-4">UTC-04:00 (EDT)</option>
+                        <option value="-3">UTC-03:00</option>
+                        <option value="-2">UTC-02:00</option>
+                        <option value="-1">UTC-01:00</option>
+                        <option value="0" selected>UTC+00:00</option>
+                        <option value="1">UTC+01:00 (CET)</option>
+                        <option value="2">UTC+02:00</option>
+                        <option value="3">UTC+03:00</option>
+                        <option value="4">UTC+04:00</option>
+                        <option value="5">UTC+05:00</option>
+                        <option value="5.5">UTC+05:30 (IST)</option>
+                        <option value="6">UTC+06:00</option>
+                        <option value="7">UTC+07:00</option>
+                        <option value="8">UTC+08:00</option>
+                        <option value="9">UTC+09:00 (JST)</option>
+                        <option value="9.5">UTC+09:30</option>
+                        <option value="10">UTC+10:00</option>
+                        <option value="11">UTC+11:00</option>
+                        <option value="12">UTC+12:00</option>
+                    </select>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button id="save-availability">Save My Availability</button>
+                    <button id="reset-availability" class="btn-danger">Reset My Availability</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="results">
+            <div class="card">
+                <h2>Combined Availability</h2>
+                <p>This view shows when group members are available. Click or hover over a number to see who's available at that time.</p>
+                
+                <div class="availability-grid result-grid" id="result-grid">
+                    <div class="grid-header"></div>
+                    <div class="grid-header">Monday</div>
+                    <div class="grid-header">Tuesday</div>
+                    <div class="grid-header">Wednesday</div>
+                    <div class="grid-header">Thursday</div>
+                    <div class="grid-header">Friday</div>
+                    <div class="grid-header">Saturday</div>
+                    <div class="grid-header">Sunday</div>
+                    
+                    <!-- Result time slots will be added here dynamically -->
+                </div>
+                
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-color heat-0"></div>
+                        <span>0 Members</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color heat-1"></div>
+                        <span>1 Member</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color heat-2"></div>
+                        <span>2 Members</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color heat-3"></div>
+                        <span>3 Members</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color heat-4"></div>
+                        <span>4 Members</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color heat-5"></div>
+                        <span>5+ Members</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color heat-max"></div>
+                        <span>All Members</span>
+                    </div>
+                </div>
+                
+                <div class="export-options">
+                    <h3>Share with Your Group</h3>
+                    <button class="export-btn" id="copy-link">Copy Shareable Link</button>
+                    <!-- <button class="export-btn" id="export-image">Save as Image</button> -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize app state
+        const appState = {
+            groupName: localStorage.getItem('groupName') || '',
+            yourName: localStorage.getItem('yourName') || '',
+            members: JSON.parse(localStorage.getItem('members') || '[]'),
+            availability: JSON.parse(localStorage.getItem('availability') || '{}'),
+            timezone: localStorage.getItem('timezone') || '0'
+        };
+// Check for initial data in URL and set up event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Setup tab navigation
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => content.classList.remove('active'));
+            document.getElementById(tab.dataset.tab).classList.add('active');
+        });
+    });
+    
+    // Load saved data
+    loadGroupInfo();
+    loadMembers();
+    initializeAvailabilityGrid();
+    loadAvailability();
+    updateTimezoneSelector();
+    calculateResults();
+    
+    // Setup event listeners
+    document.getElementById('save-group').addEventListener('click', saveGroupInfo);
+    document.getElementById('add-member').addEventListener('click', addMember);
+    document.getElementById('save-availability').addEventListener('click', saveAvailability);
+    document.getElementById('reset-availability').addEventListener('click', resetAvailability);
+    document.getElementById('copy-link').addEventListener('click', copyShareableLink);
+    document.getElementById('export-image').addEventListener('click', exportAsImage);
+    document.getElementById('timezone-select').addEventListener('change', saveTimezone);
+    
+    // Add tooltip click-away handler
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.grid-cell')) {
+            document.querySelectorAll('.tooltip.visible').forEach(t => {
+                t.classList.remove('visible');
+            });
+        }
+    });
+    
+    // Check for shared data in URL
+    checkForSharedData();
+});
+        
+        // Load group info
+        function loadGroupInfo() {
+            document.getElementById('group-name').value = appState.groupName;
+            document.getElementById('your-name').value = appState.yourName;
+        }
+        
+        // Save group info
+        function saveGroupInfo() {
+            const groupName = document.getElementById('group-name').value.trim();
+            const yourName = document.getElementById('your-name').value.trim();
+            
+            if (groupName && yourName) {
+                appState.groupName = groupName;
+                appState.yourName = yourName;
+                
+                localStorage.setItem('groupName', groupName);
+                localStorage.setItem('yourName', yourName);
+                
+                // Add yourself as a member if not already present
+                if (!appState.members.includes(yourName)) {
+                    appState.members.push(yourName);
+                    localStorage.setItem('members', JSON.stringify(appState.members));
+                    loadMembers();
+                }
+                
+                alert('Group information saved!');
+            } else {
+                alert('Please enter both group name and your name.');
+            }
+        }
+        
+        // Load members
+        function loadMembers() {
+            const memberList = document.getElementById('member-list');
+            memberList.innerHTML = '';
+            
+            appState.members.forEach(member => {
+                const memberElement = document.createElement('div');
+                memberElement.className = 'member';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = member;
+                
+                const removeButton = document.createElement('button');
+                removeButton.className = 'btn-danger';
+                removeButton.textContent = 'Remove';
+                removeButton.addEventListener('click', () => removeMember(member));
+                
+                memberElement.appendChild(nameSpan);
+                memberElement.appendChild(removeButton);
+                memberList.appendChild(memberElement);
+            });
+        }
+        
+        // Add member
+        function addMember() {
+            const memberInput = document.getElementById('new-member');
+            const memberName = memberInput.value.trim();
+            
+            if (memberName && !appState.members.includes(memberName)) {
+                appState.members.push(memberName);
+                localStorage.setItem('members', JSON.stringify(appState.members));
+                loadMembers();
+                memberInput.value = '';
+                calculateResults();
+            } else if (appState.members.includes(memberName)) {
+                alert('This member is already in your group.');
+            } else {
+                alert('Please enter a member name.');
+            }
+        }
+        
+        // Remove member
+        function removeMember(memberName) {
+            if (memberName === appState.yourName) {
+                if (!confirm('Are you sure you want to remove yourself from the group?')) {
+                    return;
+                }
+            }
+            
+            appState.members = appState.members.filter(member => member !== memberName);
+            localStorage.setItem('members', JSON.stringify(appState.members));
+            
+            // Remove availability data for this member
+            if (appState.availability[memberName]) {
+                delete appState.availability[memberName];
+                localStorage.setItem('availability', JSON.stringify(appState.availability));
+            }
+            
+            loadMembers();
+            calculateResults();
+        }
+        
+        // Initialize availability grid
+        function initializeAvailabilityGrid() {
+            const grid = document.getElementById('availability-grid');
+            const resultGrid = document.getElementById('result-grid');
+            
+            // Clear existing time slots
+            const headers = Array.from(grid.querySelectorAll('.grid-header'));
+            grid.innerHTML = '';
+            resultGrid.innerHTML = '';
+            
+            // Add headers back
+            headers.forEach(header => {
+                grid.appendChild(header.cloneNode(true));
+                resultGrid.appendChild(header.cloneNode(true));
+            });
+            
+            // Add time slots in 30-minute increments
+            for (let hour = 0; hour < 24; hour++) {
+                for (let minute = 0; minute < 60; minute += 30) {
+                    const formattedHour = hour.toString().padStart(2, '0');
+                    const formattedMinute = minute.toString().padStart(2, '0');
+                    const timeLabel = `${formattedHour}:${formattedMinute}`;
+                    const timeValue = hour + (minute / 60); // e.g. 1:30 = 1.5
+                    
+                    // Availability grid
+                    const timeCell = document.createElement('div');
+                    timeCell.className = 'grid-time';
+                    timeCell.textContent = timeLabel;
+                    grid.appendChild(timeCell);
+                    
+                    for (let day = 0; day < 7; day++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'grid-cell';
+                        cell.dataset.time = `${day}-${timeValue}`;
+                        cell.addEventListener('click', toggleTimeSlot);
+                        grid.appendChild(cell);
+                    }
+                    
+                    // Result grid
+                    const resultTimeCell = document.createElement('div');
+                    resultTimeCell.className = 'grid-time';
+                    resultTimeCell.textContent = timeLabel;
+                    resultGrid.appendChild(resultTimeCell);
+                    
+                    for (let day = 0; day < 7; day++) {
+                        const resultCell = document.createElement('div');
+                        resultCell.className = 'grid-cell heat-0';
+                        resultCell.dataset.time = `${day}-${timeValue}`;
+                        resultGrid.appendChild(resultCell);
+                    }
+                }
+            }
+        }
+        
+        // Toggle time slot selection
+        function toggleTimeSlot(e) {
+            const cell = e.target;
+            cell.classList.toggle('selected');
+        }
+        
+        // Save availability
+        function saveAvailability() {
+            if (!appState.yourName) {
+                alert('Please set your name in the Group Setup tab first.');
+                return;
+            }
+            
+            const selectedCells = document.querySelectorAll('#availability-grid .grid-cell.selected');
+            const availabilityData = Array.from(selectedCells).map(cell => cell.dataset.time);
+            
+            appState.availability[appState.yourName] = availabilityData;
+            localStorage.setItem('availability', JSON.stringify(appState.availability));
+            
+            alert('Your availability has been saved!');
+            calculateResults();
+        }
+        
+        // Load availability
+        function loadAvailability() {
+            if (!appState.yourName || !appState.availability[appState.yourName]) {
+                return;
+            }
+            
+            const yourAvailability = appState.availability[appState.yourName];
+            const cells = document.querySelectorAll('#availability-grid .grid-cell');
+            
+            cells.forEach(cell => {
+                if (yourAvailability.includes(cell.dataset.time)) {
+                    cell.classList.add('selected');
+                } else {
+                    cell.classList.remove('selected');
+                }
+            });
+        }
+        
+        // Update timezone selector
+        function updateTimezoneSelector() {
+            document.getElementById('timezone-select').value = appState.timezone;
+        }
+        
+        // Save timezone
+        function saveTimezone() {
+            const timezone = document.getElementById('timezone-select').value;
+            appState.timezone = timezone;
+            localStorage.setItem('timezone', timezone);
+        }
+        
+        // Reset availability
+        function resetAvailability() {
+            if (!appState.yourName) {
+                alert('Please set your name in the Group Setup tab first.');
+                return;
+            }
+            
+            if (confirm('Are you sure you want to reset your availability? This action cannot be undone.')) {
+                // Clear all selected cells
+                document.querySelectorAll('#availability-grid .grid-cell.selected').forEach(cell => {
+                    cell.classList.remove('selected');
+                });
+                
+                // Clear from appState
+                if (appState.availability[appState.yourName]) {
+                    appState.availability[appState.yourName] = [];
+                    localStorage.setItem('availability', JSON.stringify(appState.availability));
+                }
+                
+                alert('Your availability has been reset.');
+                calculateResults();
+            }
+        }
+        function calculateResults() {
+            const resultCells = document.querySelectorAll('#result-grid .grid-cell');
+            const totalMembers = appState.members.length;
+            
+            if (totalMembers === 0) {
+                return;
+            }
+            
+            resultCells.forEach(cell => {
+                const timeSlot = cell.dataset.time;
+                let count = 0;
+                
+                // Get list of available members for this timeslot
+                const availableMembers = [];
+                appState.members.forEach(memberName => {
+                    if (appState.availability[memberName] && appState.availability[memberName].includes(timeSlot)) {
+                        availableMembers.push(memberName);
+                        count++;
+                    }
+                });
+                
+                // Clear the cell content first
+                cell.innerHTML = '';
+                
+                // Add appropriate heat class
+                cell.className = 'grid-cell';
+                if (count === 0) {
+                    cell.classList.add('heat-0');
+                } else if (count === totalMembers) {
+                    cell.classList.add('heat-max');
+                } else if (count >= 5) {
+                    cell.classList.add('heat-5');
+                } else {
+                    cell.classList.add(`heat-${count}`);
+                }
+                
+                // Add count text and tooltip for cells with members
+                if (count > 0) {
+                    // Create a span for the count
+                    const countSpan = document.createElement('span');
+                    countSpan.textContent = count;
+                    cell.appendChild(countSpan);
+                    
+                    // Create tooltip div
+                    const tooltip = document.createElement('div');
+                    tooltip.className = 'tooltip';
+                    tooltip.innerHTML = '<strong>Available:</strong><br>' + availableMembers.join('<br>');
+                    cell.appendChild(tooltip);
+                    
+                    // Add click handler for mobile (toggle tooltip visibility)
+                    cell.addEventListener('click', function(e) {
+                        const tooltipEl = this.querySelector('.tooltip');
+                        if (tooltipEl) {
+                            // Hide all other tooltips first
+                            document.querySelectorAll('.tooltip.visible').forEach(t => {
+                                if (t !== tooltipEl) t.classList.remove('visible');
+                            });
+                            
+                            tooltipEl.classList.toggle('visible');
+                            e.stopPropagation(); // Prevent body click from immediately closing it
+                        }
+                    });
+                }
+            });
+            
+            // Add a click handler to the document body to close any open tooltips
+            document.body.addEventListener('click', function() {
+                document.querySelectorAll('.tooltip.visible').forEach(t => {
+                    t.classList.remove('visible');
+                });
+            });
+            
+            // Update legend for all members
+            const allMembersLegend = document.querySelector('.legend-item:last-child span');
+            allMembersLegend.textContent = `All Members (${totalMembers})`;
+        }
+        
+        // Copy shareable link
+        function copyShareableLink() {
+            const data = {
+                groupName: appState.groupName,
+                members: appState.members,
+                availability: appState.availability
+            };
+            
+            const shareData = btoa(JSON.stringify(data));
+            const shareUrl = `${window.location.href.split('?')[0]}?share=${shareData}`;
+            
+            navigator.clipboard.writeText(shareUrl)
+                .then(() => {
+                    alert('Shareable link copied to clipboard! Share this with your group members.');
+                })
+                .catch(err => {
+                    console.error('Could not copy text: ', err);
+                    alert('Failed to copy link. Please try again.');
+                });
+        }
+        
+        // Export as image (simplified version - just alerts)
+        function exportAsImage() {
+            alert('This feature would normally save the schedule as an image. For a full implementation, you would need to add html2canvas or a similar library.');
+        }
+        
+        // Check for shared data in URL
+        function checkForSharedData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const shareData = urlParams.get('share');
+            
+            if (shareData) {
+                try {
+                    const decodedData = JSON.parse(atob(shareData));
+                    
+                    if (confirm(`Do you want to load the shared "${decodedData.groupName}" group data?`)) {
+                        // Merge with local data or replace completely
+                        appState.groupName = decodedData.groupName;
+                        appState.members = decodedData.members;
+                        
+                        // Merge availability data
+                        const mergedAvailability = {...appState.availability, ...decodedData.availability};
+                        appState.availability = mergedAvailability;
+                        
+                        // Save to localStorage
+                        localStorage.setItem('groupName', appState.groupName);
+                        localStorage.setItem('members', JSON.stringify(appState.members));
+                        localStorage.setItem('availability', JSON.stringify(appState.availability));
+                        
+                        // Reload UI
+                        loadGroupInfo();
+                        loadMembers();
+                        loadAvailability();
+                        calculateResults();
+                        
+                        alert('Shared data loaded successfully!');
+                    }
+                } catch (error) {
+                    console.error('Error loading shared data:', error);
+                    alert('Invalid shared data. Could not load.');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
