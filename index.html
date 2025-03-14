@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maplestory Bossing Scheduler</title>
+    <!-- Firebase SDK (Compatibility version) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.0/firebase-app-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.0/firebase-auth-compat.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/9.22.0/firebase-database-compat.min.js"></script>
     <style>
         :root {
             --primary: #4a348c; /* Darker purple for better contrast */
@@ -12,6 +16,8 @@
             --light: #f9f9f9;
             --success: #4caf50;
             --danger: #f44336;
+            --warning: #ff9800;
+            --info: #2196f3;
         }
         
         body {
@@ -30,6 +36,7 @@
             padding: 1rem;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+            position: relative;
         }
         
         h1 {
@@ -115,12 +122,25 @@
             background-color: #553c85;
         }
         
+        button:disabled {
+            background-color: #999;
+            cursor: not-allowed;
+        }
+        
         .btn-danger {
             background-color: var(--danger);
         }
         
         .btn-danger:hover {
             background-color: #d32f2f;
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+        }
+        
+        .btn-success:hover {
+            background-color: #388e3c;
         }
         
         .availability-grid {
@@ -171,7 +191,7 @@
         .tooltip {
             display: none;
             position: absolute;
-            top: -70px;
+            top: -100px; /* Increased space for more content */
             left: 50%;
             transform: translateX(-50%);
             background-color: #fff;
@@ -206,10 +226,6 @@
         }
         
         .tooltip.visible {
-            display: block;
-        }
-        
-        .grid-cell:hover .tooltip {
             display: block;
         }
         
@@ -267,6 +283,84 @@
             margin-bottom: 0.5rem;
         }
         
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: white;
+            display: inline-block;
+            margin-top: 5px;
+        }
+        
+        .status-connected {
+            background-color: var(--success);
+        }
+        
+        .status-disconnected {
+            background-color: var(--danger);
+        }
+        
+        .status-syncing {
+            background-color: var(--warning);
+        }
+        
+        .status-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 0.7rem;
+            padding: 4px 8px;
+            border-radius: 12px;
+            color: white;
+            background-color: rgba(0,0,0,0.2);
+        }
+        
+        .alert-box {
+            background-color: #e6f7ff;
+            border: 1px solid #91d5ff;
+            border-radius: 4px;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+        }
+        
+        .alert-box p {
+            margin: 5px 0;
+        }
+        
+        .info-box {
+            background-color: #e8f3f9;
+            border-left: 4px solid var(--info);
+            padding: 10px 15px;
+            margin: 15px 0;
+            font-size: 0.9rem;
+        }
+        
+        .group-id-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            padding: 5px 10px;
+        }
+        
+        .group-id-display {
+            font-family: monospace;
+            font-weight: bold;
+            border: 1px dashed #ccc;
+            padding: 2px 8px;
+            border-radius: 3px;
+            background-color: #f1f1f1;
+            cursor: pointer;
+            user-select: all;
+        }
+        
+        .group-id-display:hover {
+            background-color: #e0e0e0;
+        }
+        
         @media (max-width: 768px) {
             .availability-grid {
                 grid-template-columns: 60px repeat(7, 1fr);
@@ -277,12 +371,22 @@
             .grid-header, .grid-time, .grid-cell {
                 padding: 3px;
             }
+            
+            .tooltip {
+                max-width: 200px;
+                font-size: 0.7rem;
+            }
+            
+            .status-indicator {
+                display: none; /* Hide on mobile to save space */
+            }
         }
     </style>
 </head>
 <body>
     <header>
         <h1>Maplestory Bossing Scheduler</h1>
+        <!-- <div id="connection-status" class="status-indicator">Initializing...</div> -->
     </header>
     
     <div class="container">
@@ -304,19 +408,40 @@
                     <input type="text" id="your-name" placeholder="Enter your name or character name">
                 </div>
                 <button id="save-group">Save Group Info</button>
+                
+                <div id="group-sync-status" style="margin-top: 15px; display: none;">
+                    <div class="alert-box">
+                        <p><strong>Real-time sync enabled!</strong></p>
+                        <div class="group-id-container">
+                            <span>Group ID:</span>
+                            <span id="group-id-display" class="group-id-display" title="Click to copy"></span>
+                            <span id="copy-status" style="color: var(--success); font-size: 0.8rem; display: none;">Copied!</span>
+                        </div>
+                        <p style="font-size: 0.8rem; color: #666; margin-top: 5px;">Click the Group ID to copy it to your clipboard</p>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h3>Join Existing Group</h3>
+                    <div class="form-group">
+                        <label for="group-id-input">Enter Group ID</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="text" id="group-id-input" placeholder="Enter Group ID to join">
+                            <button id="join-group" style="width: auto;">Join</button>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="card">
                 <h2>Group Members</h2>
-                <div class="form-group">
-                    <label for="new-member">Add Group Member</label>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <input type="text" id="new-member" placeholder="Enter member name or character">
-                        <button id="add-member" style="width: auto;">Add</button>
-                    </div>
-                </div>
                 <div class="member-list" id="member-list">
                     <!-- Members will be added here dynamically -->
+                </div>
+                
+                <div class="info-box">
+                    <p>Members are automatically added when they join your group and set their name.</p>
+                    <p>All changes are synchronized in real-time with all members of your group.</p>
                 </div>
             </div>
         </div>
@@ -373,8 +498,12 @@
                 </div>
                 
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button id="save-availability">Save My Availability</button>
+                    <button id="save-availability" class="btn-success">Save My Availability</button>
                     <button id="reset-availability" class="btn-danger">Reset My Availability</button>
+                </div>
+                
+                <div id="availability-sync-status" class="info-box" style="display: none;">
+                    <p><strong>Synchronization active!</strong> Your availability will automatically sync with your group.</p>
                 </div>
             </div>
         </div>
@@ -383,6 +512,10 @@
             <div class="card">
                 <h2>Combined Availability</h2>
                 <p>This view shows when group members are available. Click or hover over a number to see who's available at that time.</p>
+                
+                <div id="sync-status-display" class="alert-box" style="display: none;">
+                    <p><strong>Real-time synchronization active!</strong> Any changes made by group members will appear automatically.</p>
+                </div>
                 
                 <div class="availability-grid result-grid" id="result-grid">
                     <div class="grid-header"></div>
@@ -431,22 +564,1066 @@
                 <div class="export-options">
                     <h3>Share with Your Group</h3>
                     <button class="export-btn" id="copy-link">Copy Shareable Link</button>
-                    <!-- <button class="export-btn" id="export-image">Save as Image</button> -->
+                    <button class="export-btn" id="export-image">Save as Image</button>
                 </div>
             </div>
         </div>
     </div>
     
+    <!-- Your updated JavaScript will go here -->
     <script>
         // Initialize app state
-        const appState = {
-            groupName: localStorage.getItem('groupName') || '',
-            yourName: localStorage.getItem('yourName') || '',
-            members: JSON.parse(localStorage.getItem('members') || '[]'),
-            availability: JSON.parse(localStorage.getItem('availability') || '{}'),
-            timezone: localStorage.getItem('timezone') || '0'
+const appState = {
+    groupName: localStorage.getItem('groupName') || '',
+    yourName: localStorage.getItem('yourName') || '',
+    members: JSON.parse(localStorage.getItem('members') || '[]'),
+    availability: JSON.parse(localStorage.getItem('availability') || '{}'),
+    timezone: localStorage.getItem('timezone') || '0',
+    groupId: localStorage.getItem('groupId') || '',
+    isFirebaseInitialized: false
+};
+
+// Firebase configuration - Your Firebase project details
+const firebaseConfig = {
+    apiKey: "AIzaSyAJJzf6FSPSbMTfEyYCZ6sLPt2onn4jtCY",
+    authDomain: "maple-bossing-schedule.firebaseapp.com",
+    databaseURL: "https://maple-bossing-schedule-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "maple-bossing-schedule",
+    storageBucket: "maple-bossing-schedule.firebasestorage.app",
+    messagingSenderId: "546242541642",
+    appId: "1:546242541642:web:12a19f763c6d66e5f40eb3"
+};
+
+// Enhanced Firebase initialization with better error handling
+function initializeFirebase() {
+    if (appState.isFirebaseInitialized) return Promise.resolve();
+    
+    try {
+        firebase.initializeApp(firebaseConfig);
+        appState.isFirebaseInitialized = true;
+        
+        console.log("Firebase app initialized");
+        
+        // Set up anonymous authentication
+        return firebase.auth().signInAnonymously()
+            .then(() => {
+                console.log("Firebase authenticated successfully");
+                return setupRealtimeSync();
+            })
+            .catch(error => {
+                console.error("Firebase authentication error:", error);
+                alert(`Error connecting to the synchronization service: ${error.message}. Using local storage only.`);
+                return Promise.reject(error);
+            });
+    } catch (error) {
+        console.error("Firebase initialization error:", error);
+        alert(`Error initializing the synchronization service: ${error.message}. Using local storage only.`);
+        return Promise.reject(error);
+    }
+}
+
+// Improved real-time sync with better data handling
+function setupRealtimeSync() {
+    if (!appState.groupId) return Promise.resolve();
+    
+    const groupRef = firebase.database().ref(`groups/${appState.groupId}`);
+    
+    // Listen for changes to the group data
+    groupRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+            console.log("No data found for group:", appState.groupId);
+            return;
+        }
+        
+        console.log("Received Firebase update:", data);
+        
+        // Update local app state with Firebase data
+        if (data.name && data.name !== appState.groupName) {
+            appState.groupName = data.name;
+            localStorage.setItem('groupName', appState.groupName);
+            document.getElementById('group-name').value = appState.groupName;
+        }
+        
+        // Update members if changed
+        if (data.members && JSON.stringify(data.members) !== JSON.stringify(appState.members)) {
+            appState.members = data.members;
+            localStorage.setItem('members', JSON.stringify(appState.members));
+        }
+        
+        // Update availability if changed
+        if (data.availability && JSON.stringify(data.availability) !== JSON.stringify(appState.availability)) {
+            appState.availability = data.availability;
+            localStorage.setItem('availability', JSON.stringify(appState.availability));
+        }
+        
+        // Update UI
+        loadMembers();
+        loadAvailability();
+        calculateResults();
+        
+        // Show sync status if on results tab
+        if (document.querySelector('.tab[data-tab="results"]').classList.contains('active')) {
+            document.getElementById('sync-status-display').style.display = 'block';
+        }
+    }, (error) => {
+        // This is the error callback for the 'value' event
+        console.error("Firebase sync error:", error);
+        alert(`Error syncing with the group: ${error.message}. Some changes may not be synchronized.`);
+    });
+    
+    // Note: Removed the invalid 'error' event type that was causing the issue
+    
+    return Promise.resolve();
+}
+
+// Save group data to Firebase with error handling and proper timestamps
+function saveGroupToFirebase() {
+    if (!appState.isFirebaseInitialized || !appState.groupId) {
+        console.warn("Firebase not initialized or no group ID");
+        return Promise.reject(new Error("Firebase not initialized or no group ID"));
+    }
+    
+    const groupRef = firebase.database().ref(`groups/${appState.groupId}`);
+    console.log("Saving group data to Firebase:", appState.groupId);
+    
+    return groupRef.set({
+        name: appState.groupName,
+        members: appState.members,
+        availability: appState.availability,
+        lastUpdated: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+        console.log("Group data saved successfully to Firebase");
+        return Promise.resolve();
+    }).catch(error => {
+        console.error("Error saving to Firebase:", error);
+        alert(`Error saving group data: ${error.message}. Your changes are saved locally but may not be synchronized.`);
+        return Promise.reject(error);
+    });
+}
+
+// Update members in Firebase with proper error handling
+function updateMembersInFirebase() {
+    if (!appState.isFirebaseInitialized || !appState.groupId) {
+        console.warn("Firebase not initialized or no group ID");
+        return Promise.reject(new Error("Firebase not initialized or no group ID"));
+    }
+    
+    const groupRef = firebase.database().ref(`groups/${appState.groupId}`);
+    console.log("Updating members in Firebase");
+    
+    // Update both members and the lastUpdated timestamp
+    return groupRef.update({
+        members: appState.members,
+        lastUpdated: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+        console.log("Members updated successfully in Firebase");
+        return Promise.resolve();
+    }).catch(error => {
+        console.error("Error updating members in Firebase:", error);
+        alert(`Error updating members: ${error.message}. Your changes are saved locally but may not be synchronized.`);
+        return Promise.reject(error);
+    });
+}
+
+// Update availability in Firebase with proper error handling
+function updateAvailabilityInFirebase() {
+    if (!appState.isFirebaseInitialized || !appState.groupId) {
+        console.warn("Firebase not initialized or no group ID");
+        return Promise.reject(new Error("Firebase not initialized or no group ID"));
+    }
+    
+    const groupRef = firebase.database().ref(`groups/${appState.groupId}`);
+    console.log("Updating availability in Firebase");
+    
+    // Update both availability and the lastUpdated timestamp
+    return groupRef.update({
+        availability: appState.availability,
+        lastUpdated: firebase.database.ServerValue.TIMESTAMP
+    }).then(() => {
+        console.log("Availability updated successfully in Firebase");
+        return Promise.resolve();
+    }).catch(error => {
+        console.error("Error updating availability in Firebase:", error);
+        alert(`Error updating availability: ${error.message}. Your changes are saved locally but may not be synchronized.`);
+        return Promise.reject(error);
+    });
+}
+
+// Load group info
+function loadGroupInfo() {
+    document.getElementById('group-name').value = appState.groupName;
+    document.getElementById('your-name').value = appState.yourName;
+}
+
+// Enhanced save group info with better Firebase integration
+function saveGroupInfo() {
+    const groupName = document.getElementById('group-name').value.trim();
+    const yourName = document.getElementById('your-name').value.trim();
+    
+    if (!groupName || !yourName) {
+        alert('Please enter both group name and your name.');
+        return;
+    }
+    
+    appState.groupName = groupName;
+    appState.yourName = yourName;
+    
+    localStorage.setItem('groupName', groupName);
+    localStorage.setItem('yourName', yourName);
+    
+    // Generate a group ID if it doesn't exist
+    if (!appState.groupId) {
+        appState.groupId = generateGroupId(groupName);
+        localStorage.setItem('groupId', appState.groupId);
+        
+        // Initialize Firebase and set up group in database
+        initializeFirebase().then(() => {
+            // Add yourself as a member if not already present
+            if (!appState.members.includes(yourName)) {
+                appState.members.push(yourName);
+                localStorage.setItem('members', JSON.stringify(appState.members));
+            }
+            
+            // Create initial group in Firebase
+            saveGroupToFirebase().then(() => {
+                alert('Group created successfully! Your Group ID is: ' + appState.groupId);
+                updateGroupIdDisplay();
+                loadMembers();
+            });
+        });
+    } else {
+        // Add yourself as a member if not already present
+        if (!appState.members.includes(yourName)) {
+            appState.members.push(yourName);
+            localStorage.setItem('members', JSON.stringify(appState.members));
+            loadMembers();
+        }
+        
+        // Update existing group in Firebase
+        if (appState.isFirebaseInitialized) {
+            saveGroupToFirebase().then(() => {
+                alert('Group information updated successfully!');
+                updateGroupIdDisplay();
+            });
+        } else {
+            initializeFirebase().then(() => {
+                saveGroupToFirebase().then(() => {
+                    alert('Group information updated and synchronized successfully!');
+                    updateGroupIdDisplay();
+                });
+            });
+        }
+    }
+}
+
+// Generate a group ID from the group name
+function generateGroupId(groupName) {
+    // Create a simple hash from the group name + random string
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    const baseStr = groupName.toLowerCase().replace(/[^a-z0-9]/g, '') + randomStr;
+    let hash = 0;
+    for (let i = 0; i < baseStr.length; i++) {
+        const char = baseStr.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16).substring(0, 8);
+}
+
+// Load members
+function loadMembers() {
+    const memberList = document.getElementById('member-list');
+    memberList.innerHTML = '';
+    
+    appState.members.forEach(member => {
+        const memberElement = document.createElement('div');
+        memberElement.className = 'member';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = member;
+        
+        const removeButton = document.createElement('button');
+        removeButton.className = 'btn-danger';
+        removeButton.textContent = 'Remove';
+        removeButton.addEventListener('click', () => removeMember(member));
+        
+        memberElement.appendChild(nameSpan);
+        memberElement.appendChild(removeButton);
+        memberList.appendChild(memberElement);
+    });
+}
+
+// Enhanced function to add a member with Firebase integration
+function addMember() {
+    const memberInput = document.getElementById('new-member');
+    const memberName = memberInput.value.trim();
+    
+    if (!memberName) {
+        alert('Please enter a member name.');
+        return;
+    }
+    
+    if (appState.members.includes(memberName)) {
+        alert('This member is already in your group.');
+        return;
+    }
+    
+    // Add locally
+    appState.members.push(memberName);
+    localStorage.setItem('members', JSON.stringify(appState.members));
+    
+    // Update UI
+    loadMembers();
+    calculateResults();
+    memberInput.value = '';
+    
+    // Update Firebase if connected
+    if (appState.isFirebaseInitialized && appState.groupId) {
+        updateMembersInFirebase()
+            .then(() => {
+                console.log(`Member "${memberName}" added and synchronized.`);
+            })
+            .catch((error) => {
+                console.error("Error syncing new member:", error);
+            });
+    }
+}
+
+// Enhanced function to remove a member with Firebase integration
+function removeMember(memberName) {
+    if (memberName === appState.yourName) {
+        if (!confirm('Are you sure you want to remove yourself from the group?')) {
+            return;
+        }
+    } else if (!confirm(`Are you sure you want to remove ${memberName} from the group?`)) {
+        return;
+    }
+    
+    // Remove from local state
+    appState.members = appState.members.filter(member => member !== memberName);
+    localStorage.setItem('members', JSON.stringify(appState.members));
+    
+    // Remove availability data for this member
+    if (appState.availability[memberName]) {
+        delete appState.availability[memberName];
+        localStorage.setItem('availability', JSON.stringify(appState.availability));
+    }
+    
+    // Update UI
+    loadMembers();
+    calculateResults();
+    
+    // Update Firebase if connected
+    if (appState.isFirebaseInitialized && appState.groupId) {
+        // Update both members and availability in Firebase
+        Promise.all([
+            updateMembersInFirebase(),
+            updateAvailabilityInFirebase()
+        ])
+            .then(() => {
+                console.log(`Member "${memberName}" removed and synchronized.`);
+            })
+            .catch((error) => {
+                console.error("Error syncing member removal:", error);
+            });
+    }
+}
+
+// Initialize availability grid
+function initializeAvailabilityGrid() {
+    const grid = document.getElementById('availability-grid');
+    const resultGrid = document.getElementById('result-grid');
+    
+    // Clear existing time slots
+    const headers = Array.from(grid.querySelectorAll('.grid-header'));
+    grid.innerHTML = '';
+    resultGrid.innerHTML = '';
+    
+    // Add headers back
+    headers.forEach(header => {
+        grid.appendChild(header.cloneNode(true));
+        resultGrid.appendChild(header.cloneNode(true));
+    });
+    
+    // Add time slots in 30-minute increments
+    for (let hour = 0; hour < 24; hour++) {
+        for (let minute = 0; minute < 60; minute += 30) {
+            const formattedHour = hour.toString().padStart(2, '0');
+            const formattedMinute = minute.toString().padStart(2, '0');
+            const timeLabel = `${formattedHour}:${formattedMinute}`;
+            const timeValue = hour + (minute / 60); // e.g. 1:30 = 1.5
+            
+            // Availability grid
+            const timeCell = document.createElement('div');
+            timeCell.className = 'grid-time';
+            timeCell.textContent = timeLabel;
+            grid.appendChild(timeCell);
+            
+            for (let day = 0; day < 7; day++) {
+                const cell = document.createElement('div');
+                cell.className = 'grid-cell';
+                cell.dataset.time = `${day}-${timeValue}`;
+                cell.addEventListener('click', toggleTimeSlot);
+                grid.appendChild(cell);
+            }
+            
+            // Result grid
+            const resultTimeCell = document.createElement('div');
+            resultTimeCell.className = 'grid-time';
+            resultTimeCell.textContent = timeLabel;
+            resultGrid.appendChild(resultTimeCell);
+            
+            for (let day = 0; day < 7; day++) {
+                const resultCell = document.createElement('div');
+                resultCell.className = 'grid-cell heat-0';
+                resultCell.dataset.time = `${day}-${timeValue}`;
+                resultGrid.appendChild(resultCell);
+            }
+        }
+    }
+}
+
+// Toggle time slot selection
+function toggleTimeSlot(e) {
+    const cell = e.target;
+    cell.classList.toggle('selected');
+}
+
+// Fixed save availability to update Firebase after saving locally
+function saveAvailability() {
+    if (!appState.yourName) {
+        alert('Please set your name in the Group Setup tab first.');
+        return;
+    }
+    
+    const selectedCells = document.querySelectorAll('#availability-grid .grid-cell.selected');
+    const availabilityData = Array.from(selectedCells).map(cell => cell.dataset.time);
+    
+    // Update local storage
+    appState.availability[appState.yourName] = availabilityData;
+    localStorage.setItem('availability', JSON.stringify(appState.availability));
+    
+    // Update Firebase if connected
+    if (appState.isFirebaseInitialized && appState.groupId) {
+        updateAvailabilityInFirebase()
+            .then(() => {
+                alert('Your availability has been saved and synchronized with your group!');
+            })
+            .catch(() => {
+                alert('Your availability has been saved locally, but could not be synchronized with your group.');
+            });
+    } else {
+        alert('Your availability has been saved locally.');
+    }
+    
+    calculateResults();
+}
+
+// Load availability
+function loadAvailability() {
+    if (!appState.yourName || !appState.availability[appState.yourName]) {
+        return;
+    }
+    
+    const yourAvailability = appState.availability[appState.yourName];
+    const cells = document.querySelectorAll('#availability-grid .grid-cell');
+    
+    cells.forEach(cell => {
+        if (yourAvailability.includes(cell.dataset.time)) {
+            cell.classList.add('selected');
+        } else {
+            cell.classList.remove('selected');
+        }
+    });
+}
+
+// Update timezone selector
+function updateTimezoneSelector() {
+    document.getElementById('timezone-select').value = appState.timezone;
+}
+
+// Save timezone
+function saveTimezone() {
+    const timezone = document.getElementById('timezone-select').value;
+    appState.timezone = timezone;
+    localStorage.setItem('timezone', timezone);
+}
+
+// Fixed reset availability to update Firebase after resetting locally
+function resetAvailability() {
+    if (!appState.yourName) {
+        alert('Please set your name in the Group Setup tab first.');
+        return;
+    }
+    
+    if (confirm('Are you sure you want to reset your availability? This action cannot be undone.')) {
+        // Clear all selected cells
+        document.querySelectorAll('#availability-grid .grid-cell.selected').forEach(cell => {
+            cell.classList.remove('selected');
+        });
+        
+        // Clear from appState
+        if (appState.availability[appState.yourName]) {
+            appState.availability[appState.yourName] = [];
+            localStorage.setItem('availability', JSON.stringify(appState.availability));
+            
+            // Update Firebase if connected
+            if (appState.isFirebaseInitialized && appState.groupId) {
+                updateAvailabilityInFirebase()
+                    .then(() => {
+                        alert('Your availability has been reset and synchronized with your group.');
+                    })
+                    .catch(() => {
+                        alert('Your availability has been reset locally, but could not be synchronized with your group.');
+                    });
+            } else {
+                alert('Your availability has been reset.');
+            }
+        }
+        
+        calculateResults();
+    }
+}
+
+// Enhanced function to calculate results with better tooltips
+function calculateResults() {
+    const resultCells = document.querySelectorAll('#result-grid .grid-cell');
+    const totalMembers = appState.members.length;
+    
+    if (totalMembers === 0) {
+        return;
+    }
+    
+    resultCells.forEach(cell => {
+        const timeSlot = cell.dataset.time;
+        let count = 0;
+        
+        // Get list of available members for this timeslot
+        const availableMembers = [];
+        appState.members.forEach(memberName => {
+            if (appState.availability[memberName] && appState.availability[memberName].includes(timeSlot)) {
+                availableMembers.push(memberName);
+                count++;
+            }
+        });
+        
+        // Clear the cell content first
+        cell.innerHTML = '';
+        
+        // Add appropriate heat class
+        cell.className = 'grid-cell';
+        if (count === 0) {
+            cell.classList.add('heat-0');
+        } else if (count === totalMembers) {
+            cell.classList.add('heat-max');
+        } else if (count >= 5) {
+            cell.classList.add('heat-5');
+        } else {
+            cell.classList.add(`heat-${count}`);
+        }
+        
+        // Add count text and tooltip for cells with members
+        if (count > 0) {
+            // Create a span for the count
+            const countSpan = document.createElement('span');
+            countSpan.textContent = count;
+            cell.appendChild(countSpan);
+            
+            // Extract the day and time for the tooltip
+            const [day, timeValue] = timeSlot.split('-');
+            const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            const dayName = dayNames[parseInt(day)];
+            
+            // Convert time value to hours and minutes
+            const hours = Math.floor(parseFloat(timeValue));
+            const minutes = Math.round((parseFloat(timeValue) - hours) * 60);
+            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            
+            // Create tooltip div with enhanced information
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            
+            // Add time information to tooltip
+            tooltip.innerHTML = `<strong>${dayName} at ${timeString}</strong><br>`;
+            tooltip.innerHTML += `<strong>${count}/${totalMembers} members available:</strong><br>`;
+            tooltip.innerHTML += availableMembers.map(member => 
+                member === appState.yourName ? `<span style="font-weight: bold;">${member} (you)</span>` : member
+            ).join('<br>');
+            
+            // Add unavailable members if not everyone is available
+            if (count < totalMembers) {
+                const unavailableMembers = appState.members.filter(member => !availableMembers.includes(member));
+                if (unavailableMembers.length > 0) {
+                    tooltip.innerHTML += '<br><br><strong>Not available:</strong><br>';
+                    tooltip.innerHTML += unavailableMembers.map(member => 
+                        member === appState.yourName ? `<span style="color: #999;">${member} (you)</span>` : `<span style="color: #999;">${member}</span>`
+                    ).join('<br>');
+                }
+            }
+            
+            cell.appendChild(tooltip);
+            
+            // Add click handler for mobile (toggle tooltip visibility)
+            cell.addEventListener('click', function(e) {
+                const tooltipEl = this.querySelector('.tooltip');
+                if (tooltipEl) {
+                    // Hide all other tooltips first
+                    document.querySelectorAll('.tooltip.visible').forEach(t => {
+                        if (t !== tooltipEl) t.classList.remove('visible');
+                    });
+                    
+                    tooltipEl.classList.toggle('visible');
+                    e.stopPropagation(); // Prevent body click from immediately closing it
+                }
+            });
+        }
+    });
+    
+    // Update legend for all members
+    const allMembersLegend = document.querySelector('.legend-item:last-child span');
+    allMembersLegend.textContent = `All Members (${totalMembers})`;
+}
+
+// Enhanced function to copy shareable link
+function copyShareableLink() {
+    if (!appState.groupId) {
+        alert("Please save your group information first to generate a shareable link.");
+        return;
+    }
+    
+    if (!appState.isFirebaseInitialized) {
+        // Try to initialize Firebase first
+        initializeFirebase()
+            .then(() => {
+                // Now try to copy the link again
+                copyShareableLink();
+            })
+            .catch((error) => {
+                // Fallback to the old sharing method
+                legacyCopyShareableLink();
+            });
+        return;
+    }
+    
+    // Generate a link with the group ID for Firebase
+    const shareUrl = `${window.location.href.split('?')[0]}?group=${appState.groupId}`;
+    
+    navigator.clipboard.writeText(shareUrl)
+        .then(() => {
+            alert('Shareable link copied to clipboard! Anyone can use this link to join your group and synchronize schedules in real-time.');
+        })
+        .catch(err => {
+            console.error('Could not copy text: ', err);
+            
+            // Fallback for browsers that don't support clipboard API
+            const textArea = document.createElement('textarea');
+            textArea.value = shareUrl;
+            textArea.style.position = 'fixed';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    alert('Shareable link copied to clipboard! Anyone can use this link to join your group and synchronize schedules in real-time.');
+                } else {
+                    throw new Error('Copy command was unsuccessful');
+                }
+            } catch (err) {
+                console.error('Fallback copying failed: ', err);
+                alert('Failed to copy link. Here is the link to share: ' + shareUrl);
+            }
+            
+            document.body.removeChild(textArea);
+        });
+}
+
+// Legacy sharing method as fallback
+function legacyCopyShareableLink() {
+    const data = {
+        groupName: appState.groupName,
+        members: appState.members,
+        availability: appState.availability
+    };
+    
+    const shareData = btoa(JSON.stringify(data));
+    const shareUrl = `${window.location.href.split('?')[0]}?share=${shareData}`;
+    
+    navigator.clipboard.writeText(shareUrl)
+        .then(() => {
+            alert('Shareable link copied to clipboard! Share this with your group members. Note: Real-time synchronization is not enabled with this link type.');
+        })
+        .catch(err => {
+            console.error('Could not copy text: ', err);
+            
+            // Fallback for browsers that don't support clipboard API
+            const textArea = document.createElement('textarea');
+            textArea.value = shareUrl;
+            textArea.style.position = 'fixed';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    alert('Shareable link copied to clipboard! Share this with your group members. Note: Real-time synchronization is not enabled with this link type.');
+                } else {
+                    throw new Error('Copy command was unsuccessful');
+                }
+            } catch (err) {
+                console.error('Fallback copying failed: ', err);
+                alert('Failed to copy link. Here is the link to share: ' + shareUrl);
+            }
+            
+            document.body.removeChild(textArea);
+        });
+}
+
+// Enhanced join group function with better error handling
+function joinGroup() {
+    const groupIdInput = document.getElementById('group-id-input');
+    const groupId = groupIdInput.value.trim();
+    
+    if (!groupId) {
+        alert('Please enter a valid Group ID.');
+        return;
+    }
+    
+    // Show loading state
+    const joinButton = document.getElementById('join-group');
+    const originalText = joinButton.textContent;
+    joinButton.textContent = 'Joining...';
+    joinButton.disabled = true;
+    
+    // Initialize Firebase first
+    initializeFirebase()
+        .then(() => {
+            // Check if the group exists
+            const groupRef = firebase.database().ref(`groups/${groupId}`);
+            return groupRef.once('value');
+        })
+        .then((snapshot) => {
+            const data = snapshot.val();
+            if (!data) {
+                throw new Error('Group not found. Please check the Group ID and try again.');
+            }
+            
+            // Ask user to confirm joining the group
+            if (confirm(`Do you want to join the "${data.name}" group?`)) {
+                // Set the group ID and sync data
+                appState.groupId = groupId;
+                localStorage.setItem('groupId', groupId);
+                
+                // Update group name
+                appState.groupName = data.name;
+                localStorage.setItem('groupName', data.name);
+                document.getElementById('group-name').value = data.name;
+                
+                // Update members and availability
+                appState.members = data.members || [];
+                
+                // Add yourself as member if you've set your name and aren't already in the list
+                const yourName = document.getElementById('your-name').value.trim();
+                if (yourName && !appState.members.includes(yourName)) {
+                    appState.members.push(yourName);
+                    appState.yourName = yourName;
+                    localStorage.setItem('yourName', yourName);
+                    
+                    // Update members in Firebase
+                    updateMembersInFirebase();
+                }
+                
+                localStorage.setItem('members', JSON.stringify(appState.members));
+                
+                appState.availability = data.availability || {};
+                localStorage.setItem('availability', JSON.stringify(appState.availability));
+                
+                // Reload UI
+                loadMembers();
+                loadAvailability();
+                calculateResults();
+                updateGroupIdDisplay();
+                
+                // Set up real-time sync
+                setupRealtimeSync();
+                
+                alert(`You've successfully joined the "${data.name}" group! Your schedule will now stay synchronized with your group members.`);
+                
+                // Switch to availability tab
+                // document.querySelector('.tab[data-tab="availability"]').click();
+                
+                return true;
+            }
+            return false;
+        })
+        .catch((error) => {
+            console.error("Error joining group:", error);
+            alert(error.message || 'Error joining group. Please try again.');
+        })
+        .finally(() => {
+            // Restore button state
+            joinButton.textContent = originalText;
+            joinButton.disabled = false;
+        });
+}
+
+// Enhanced update group ID display with better UI feedback
+function updateGroupIdDisplay() {
+    const groupIdDisplay = document.getElementById('group-id-display');
+    const groupSyncStatus = document.getElementById('group-sync-status');
+    
+    if (groupIdDisplay && appState.groupId) {
+        groupIdDisplay.textContent = appState.groupId;
+        groupSyncStatus.style.display = 'block';
+        
+        // Make the group ID copyable with a click
+        groupIdDisplay.style.cursor = 'pointer';
+        groupIdDisplay.title = 'Click to copy Group ID';
+        
+        // Remove existing event listener if any
+        groupIdDisplay.removeEventListener('click', copyGroupId);
+        
+        // Add new event listener
+        groupIdDisplay.addEventListener('click', copyGroupId);
+    }
+}
+
+// Helper function to copy group ID to clipboard
+function copyGroupId(e) {
+    e.preventDefault();
+    const groupId = appState.groupId;
+    
+    navigator.clipboard.writeText(groupId)
+        .then(() => {
+            // Visual feedback
+            const el = e.target;
+            const originalText = el.textContent;
+            const originalStyle = el.style.color;
+            
+            el.textContent = 'Copied!';
+            el.style.color = '#4caf50';
+            
+            setTimeout(() => {
+                el.textContent = originalText;
+                el.style.color = originalStyle;
+            }, 1500);
+        })
+        .catch(err => {
+            console.error('Could not copy group ID: ', err);
+            alert('Group ID: ' + groupId);
+        });
+}
+
+// Enhanced check for shared data
+function checkForSharedData() {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Check for Firebase group ID
+    const groupId = urlParams.get('group');
+    if (groupId) {
+        // Show loading indicator
+        const loadingDiv = document.createElement('div');
+        loadingDiv.id = 'loading-indicator';
+        loadingDiv.style.position = 'fixed';
+        loadingDiv.style.top = '0';
+        loadingDiv.style.left = '0';
+        loadingDiv.style.width = '100%';
+        loadingDiv.style.padding = '10px';
+        loadingDiv.style.backgroundColor = 'var(--primary)';
+        loadingDiv.style.color = 'white';
+        loadingDiv.style.textAlign = 'center';
+        loadingDiv.style.zIndex = '9999';
+        loadingDiv.textContent = 'Loading group data...';
+        document.body.appendChild(loadingDiv);
+        
+        appState.groupId = groupId;
+        localStorage.setItem('groupId', groupId);
+        
+        // Initialize Firebase and sync group data
+        initializeFirebase()
+            .then(() => {
+                const groupRef = firebase.database().ref(`groups/${groupId}`);
+                return groupRef.once('value');
+            })
+            .then((snapshot) => {
+                const data = snapshot.val();
+                if (!data) {
+                    throw new Error('Group not found. The link might be invalid or the group has been deleted.');
+                }
+                
+                if (confirm(`Do you want to join the "${data.name}" group?`)) {
+                    // Update app state with group data
+                    appState.groupName = data.name;
+                    localStorage.setItem('groupName', data.name);
+                    document.getElementById('group-name').value = data.name;
+                    
+                    appState.members = data.members || [];
+                    localStorage.setItem('members', JSON.stringify(appState.members));
+                    
+                    appState.availability = data.availability || {};
+                    localStorage.setItem('availability', JSON.stringify(appState.availability));
+                    
+                    // Reload UI
+                    loadGroupInfo();
+                    loadMembers();
+                    loadAvailability();
+                    calculateResults();
+                    updateGroupIdDisplay();
+                    
+                    // Set up real-time sync
+                    setupRealtimeSync();
+                    
+                    // Switch to availability tab
+                    document.querySelector('.tab[data-tab="availability"]').click();
+                    
+                    alert(`You've joined the "${data.name}" group! Your schedule will now stay synchronized with your group members.`);
+                }
+            })
+            .catch((error) => {
+                console.error("Error loading group data:", error);
+                alert(error.message || "Error loading group data");
+            })
+            .finally(() => {
+                // Remove loading indicator
+                const loadingIndicator = document.getElementById('loading-indicator');
+                if (loadingIndicator) {
+                    loadingIndicator.remove();
+                }
+            });
+        
+        return;
+    }
+    
+    // Legacy support for old sharing format
+    const shareData = urlParams.get('share');
+    if (shareData) {
+        try {
+            const decodedData = JSON.parse(atob(shareData));
+            
+            if (confirm(`Do you want to load the shared "${decodedData.groupName}" group data? Note: This is using the old sharing system without real-time sync.`)) {
+                // Merge with local data or replace completely
+                appState.groupName = decodedData.groupName;
+                appState.members = decodedData.members;
+                
+                // Merge availability data
+                const mergedAvailability = {...appState.availability, ...decodedData.availability};
+                appState.availability = mergedAvailability;
+                
+                // Save to localStorage
+                localStorage.setItem('groupName', appState.groupName);
+                localStorage.setItem('members', JSON.stringify(appState.members));
+                localStorage.setItem('availability', JSON.stringify(appState.availability));
+                
+                // Reload UI
+                loadGroupInfo();
+                loadMembers();
+                loadAvailability();
+                calculateResults();
+                
+                alert('Shared data loaded successfully! Consider setting up real-time synchronization in the Group Setup tab.');
+            }
+        } catch (error) {
+            console.error('Error loading shared data:', error);
+            alert('Invalid shared data. Could not load.');
+        }
+    }
+}
+
+// Enhanced export as image function
+function exportAsImage() {
+    // Check if html2canvas is available
+    if (typeof html2canvas === 'undefined') {
+        // Load html2canvas library dynamically
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        script.onload = function() {
+            // Once the library is loaded, proceed with the export
+            exportWithHtml2Canvas();
         };
-// Check for initial data in URL and set up event listeners
+        script.onerror = function() {
+            alert('Could not load required library for image export. Please check your internet connection and try again.');
+        };
+        document.head.appendChild(script);
+    } else {
+        // Library already loaded, proceed with export
+        exportWithHtml2Canvas();
+    }
+}
+
+// Helper function for html2canvas export
+function exportWithHtml2Canvas() {
+    const resultGrid = document.getElementById('result-grid');
+    const legend = document.querySelector('.legend');
+    
+    // Create a container for the export
+    const exportContainer = document.createElement('div');
+    exportContainer.style.backgroundColor = 'white';
+    exportContainer.style.padding = '20px';
+    exportContainer.style.width = 'fit-content';
+    
+    // Add a title
+    const title = document.createElement('h2');
+    title.textContent = appState.groupName + ' - Bossing Schedule';
+    title.style.textAlign = 'center';
+    title.style.margin = '0 0 15px 0';
+    exportContainer.appendChild(title);
+    
+    // Clone the grid and legend
+    const gridClone = resultGrid.cloneNode(true);
+    const legendClone = legend.cloneNode(true);
+    
+    // Append the clones to the container
+    exportContainer.appendChild(gridClone);
+    exportContainer.appendChild(legendClone);
+    
+    // Hide the tooltips in the clone
+    exportContainer.querySelectorAll('.tooltip').forEach(tooltip => {
+        tooltip.style.display = 'none';
+    });
+    
+    // Add a timestamp
+    const timestamp = document.createElement('div');
+    const now = new Date();
+    timestamp.textContent = 'Generated on: ' + now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+    timestamp.style.fontSize = '12px';
+    timestamp.style.color = '#666';
+    timestamp.style.textAlign = 'center';
+    timestamp.style.marginTop = '15px';
+    exportContainer.appendChild(timestamp);
+    
+    // Position offscreen for capturing
+    exportContainer.style.position = 'absolute';
+    exportContainer.style.left = '-9999px';
+    document.body.appendChild(exportContainer);
+    
+    // Use html2canvas to generate an image
+    html2canvas(exportContainer, {
+        backgroundColor: 'white',
+        scale: 2, // Better quality
+        logging: false
+    }).then(canvas => {
+        // Convert to image
+        const image = canvas.toDataURL('image/png');
+        
+        // Create a link and trigger download
+        const link = document.createElement('a');
+        link.href = image;
+        link.download = appState.groupName + '_schedule.png';
+        link.click();
+        
+        // Clean up
+        document.body.removeChild(exportContainer);
+    }).catch(error => {
+        console.error('Error generating image:', error);
+        alert('Error generating image. Please try again.');
+        document.body.removeChild(exportContainer);
+    });
+}
+
+// Enhanced DOMContentLoaded handler with better initialization flow
 document.addEventListener('DOMContentLoaded', function() {
     // Setup tab navigation
     const tabs = document.querySelectorAll('.tab');
@@ -458,24 +1635,45 @@ document.addEventListener('DOMContentLoaded', function() {
             const tabContents = document.querySelectorAll('.tab-content');
             tabContents.forEach(content => content.classList.remove('active'));
             document.getElementById(tab.dataset.tab).classList.add('active');
+            
+            // Update sync status display when switching to results tab
+            if (tab.dataset.tab === 'results') {
+                if (appState.isFirebaseInitialized && appState.groupId) {
+                    document.getElementById('sync-status-display').style.display = 'block';
+                } else {
+                    document.getElementById('sync-status-display').style.display = 'none';
+                }
+            }
         });
     });
     
+    // Add the "new member" input field and button to the members card if it doesn't exist
+    const memberList = document.getElementById('member-list');
+    const memberCard = memberList.closest('.card');
+    
     // Load saved data
     loadGroupInfo();
-    loadMembers();
     initializeAvailabilityGrid();
     loadAvailability();
     updateTimezoneSelector();
+    loadMembers();
     calculateResults();
     
     // Setup event listeners
     document.getElementById('save-group').addEventListener('click', saveGroupInfo);
-    document.getElementById('add-member').addEventListener('click', addMember);
     document.getElementById('save-availability').addEventListener('click', saveAvailability);
     document.getElementById('reset-availability').addEventListener('click', resetAvailability);
     document.getElementById('copy-link').addEventListener('click', copyShareableLink);
+    document.getElementById('export-image').addEventListener('click', exportAsImage);
     document.getElementById('timezone-select').addEventListener('change', saveTimezone);
+    document.getElementById('join-group').addEventListener('click', joinGroup);
+    
+    // Add enter key event for join group input
+    document.getElementById('group-id-input').addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            document.getElementById('join-group').click();
+        }
+    });
     
     // Add tooltip click-away handler
     document.addEventListener('click', function(e) {
@@ -486,373 +1684,61 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // Initialize Firebase connection status indicator
+    const syncStatusIndicator = document.createElement('div');
+    syncStatusIndicator.id = 'firebase-status';
+    syncStatusIndicator.style.position = 'fixed';
+    syncStatusIndicator.style.bottom = '10px';
+    syncStatusIndicator.style.right = '10px';
+    syncStatusIndicator.style.padding = '5px 10px';
+    syncStatusIndicator.style.backgroundColor = '#f1f1f1';
+    syncStatusIndicator.style.border = '1px solid #ddd';
+    syncStatusIndicator.style.borderRadius = '4px';
+    syncStatusIndicator.style.fontSize = '12px';
+    syncStatusIndicator.style.display = 'none';
+    document.body.appendChild(syncStatusIndicator);
+    
+    // Initialize Firebase if group ID exists
+    if (appState.groupId) {
+        initializeFirebase()
+            .then(() => {
+                updateGroupIdDisplay();
+                
+                // Show sync status on results tab if active
+                if (document.querySelector('.tab[data-tab="results"]').classList.contains('active')) {
+                    document.getElementById('sync-status-display').style.display = 'block';
+                }
+                
+                // Update connection status indicator
+                syncStatusIndicator.style.display = 'block';
+                syncStatusIndicator.style.backgroundColor = '#4caf50';
+                syncStatusIndicator.style.color = 'white';
+                syncStatusIndicator.textContent = 'Real-time sync: Connected';
+                
+                // Set up connection status monitoring
+                const connectedRef = firebase.database().ref('.info/connected');
+                connectedRef.on('value', (snap) => {
+                    if (snap.val() === true) {
+                        syncStatusIndicator.style.backgroundColor = '#4caf50';
+                        syncStatusIndicator.textContent = 'Real-time sync: Connected';
+                    } else {
+                        syncStatusIndicator.style.backgroundColor = '#f44336';
+                        syncStatusIndicator.textContent = 'Real-time sync: Disconnected';
+                    }
+                });
+            })
+            .catch(() => {
+                // Show offline indicator
+                syncStatusIndicator.style.display = 'block';
+                syncStatusIndicator.style.backgroundColor = '#f44336';
+                syncStatusIndicator.style.color = 'white';
+                syncStatusIndicator.textContent = 'Real-time sync: Failed';
+            });
+    }
+    
     // Check for shared data in URL
     checkForSharedData();
 });
-        
-        // Load group info
-        function loadGroupInfo() {
-            document.getElementById('group-name').value = appState.groupName;
-            document.getElementById('your-name').value = appState.yourName;
-        }
-        
-        // Save group info
-        function saveGroupInfo() {
-            const groupName = document.getElementById('group-name').value.trim();
-            const yourName = document.getElementById('your-name').value.trim();
-            
-            if (groupName && yourName) {
-                appState.groupName = groupName;
-                appState.yourName = yourName;
-                
-                localStorage.setItem('groupName', groupName);
-                localStorage.setItem('yourName', yourName);
-                
-                // Add yourself as a member if not already present
-                if (!appState.members.includes(yourName)) {
-                    appState.members.push(yourName);
-                    localStorage.setItem('members', JSON.stringify(appState.members));
-                    loadMembers();
-                }
-                
-                alert('Group information saved!');
-            } else {
-                alert('Please enter both group name and your name.');
-            }
-        }
-        
-        // Load members
-        function loadMembers() {
-            const memberList = document.getElementById('member-list');
-            memberList.innerHTML = '';
-            
-            appState.members.forEach(member => {
-                const memberElement = document.createElement('div');
-                memberElement.className = 'member';
-                
-                const nameSpan = document.createElement('span');
-                nameSpan.textContent = member;
-                
-                const removeButton = document.createElement('button');
-                removeButton.className = 'btn-danger';
-                removeButton.textContent = 'Remove';
-                removeButton.addEventListener('click', () => removeMember(member));
-                
-                memberElement.appendChild(nameSpan);
-                memberElement.appendChild(removeButton);
-                memberList.appendChild(memberElement);
-            });
-        }
-        
-        // Add member
-        function addMember() {
-            const memberInput = document.getElementById('new-member');
-            const memberName = memberInput.value.trim();
-            
-            if (memberName && !appState.members.includes(memberName)) {
-                appState.members.push(memberName);
-                localStorage.setItem('members', JSON.stringify(appState.members));
-                loadMembers();
-                memberInput.value = '';
-                calculateResults();
-            } else if (appState.members.includes(memberName)) {
-                alert('This member is already in your group.');
-            } else {
-                alert('Please enter a member name.');
-            }
-        }
-        
-        // Remove member
-        function removeMember(memberName) {
-            if (memberName === appState.yourName) {
-                if (!confirm('Are you sure you want to remove yourself from the group?')) {
-                    return;
-                }
-            }
-            
-            appState.members = appState.members.filter(member => member !== memberName);
-            localStorage.setItem('members', JSON.stringify(appState.members));
-            
-            // Remove availability data for this member
-            if (appState.availability[memberName]) {
-                delete appState.availability[memberName];
-                localStorage.setItem('availability', JSON.stringify(appState.availability));
-            }
-            
-            loadMembers();
-            calculateResults();
-        }
-        
-        // Initialize availability grid
-        function initializeAvailabilityGrid() {
-            const grid = document.getElementById('availability-grid');
-            const resultGrid = document.getElementById('result-grid');
-            
-            // Clear existing time slots
-            const headers = Array.from(grid.querySelectorAll('.grid-header'));
-            grid.innerHTML = '';
-            resultGrid.innerHTML = '';
-            
-            // Add headers back
-            headers.forEach(header => {
-                grid.appendChild(header.cloneNode(true));
-                resultGrid.appendChild(header.cloneNode(true));
-            });
-            
-            // Add time slots in 30-minute increments
-            for (let hour = 0; hour < 24; hour++) {
-                for (let minute = 0; minute < 60; minute += 30) {
-                    const formattedHour = hour.toString().padStart(2, '0');
-                    const formattedMinute = minute.toString().padStart(2, '0');
-                    const timeLabel = `${formattedHour}:${formattedMinute}`;
-                    const timeValue = hour + (minute / 60); // e.g. 1:30 = 1.5
-                    
-                    // Availability grid
-                    const timeCell = document.createElement('div');
-                    timeCell.className = 'grid-time';
-                    timeCell.textContent = timeLabel;
-                    grid.appendChild(timeCell);
-                    
-                    for (let day = 0; day < 7; day++) {
-                        const cell = document.createElement('div');
-                        cell.className = 'grid-cell';
-                        cell.dataset.time = `${day}-${timeValue}`;
-                        cell.addEventListener('click', toggleTimeSlot);
-                        grid.appendChild(cell);
-                    }
-                    
-                    // Result grid
-                    const resultTimeCell = document.createElement('div');
-                    resultTimeCell.className = 'grid-time';
-                    resultTimeCell.textContent = timeLabel;
-                    resultGrid.appendChild(resultTimeCell);
-                    
-                    for (let day = 0; day < 7; day++) {
-                        const resultCell = document.createElement('div');
-                        resultCell.className = 'grid-cell heat-0';
-                        resultCell.dataset.time = `${day}-${timeValue}`;
-                        resultGrid.appendChild(resultCell);
-                    }
-                }
-            }
-        }
-        
-        // Toggle time slot selection
-        function toggleTimeSlot(e) {
-            const cell = e.target;
-            cell.classList.toggle('selected');
-        }
-        
-        // Save availability
-        function saveAvailability() {
-            if (!appState.yourName) {
-                alert('Please set your name in the Group Setup tab first.');
-                return;
-            }
-            
-            const selectedCells = document.querySelectorAll('#availability-grid .grid-cell.selected');
-            const availabilityData = Array.from(selectedCells).map(cell => cell.dataset.time);
-            
-            appState.availability[appState.yourName] = availabilityData;
-            localStorage.setItem('availability', JSON.stringify(appState.availability));
-            
-            alert('Your availability has been saved!');
-            calculateResults();
-        }
-        
-        // Load availability
-        function loadAvailability() {
-            if (!appState.yourName || !appState.availability[appState.yourName]) {
-                return;
-            }
-            
-            const yourAvailability = appState.availability[appState.yourName];
-            const cells = document.querySelectorAll('#availability-grid .grid-cell');
-            
-            cells.forEach(cell => {
-                if (yourAvailability.includes(cell.dataset.time)) {
-                    cell.classList.add('selected');
-                } else {
-                    cell.classList.remove('selected');
-                }
-            });
-        }
-        
-        // Update timezone selector
-        function updateTimezoneSelector() {
-            document.getElementById('timezone-select').value = appState.timezone;
-        }
-        
-        // Save timezone
-        function saveTimezone() {
-            const timezone = document.getElementById('timezone-select').value;
-            appState.timezone = timezone;
-            localStorage.setItem('timezone', timezone);
-        }
-        
-        // Reset availability
-        function resetAvailability() {
-            if (!appState.yourName) {
-                alert('Please set your name in the Group Setup tab first.');
-                return;
-            }
-            
-            if (confirm('Are you sure you want to reset your availability? This action cannot be undone.')) {
-                // Clear all selected cells
-                document.querySelectorAll('#availability-grid .grid-cell.selected').forEach(cell => {
-                    cell.classList.remove('selected');
-                });
-                
-                // Clear from appState
-                if (appState.availability[appState.yourName]) {
-                    appState.availability[appState.yourName] = [];
-                    localStorage.setItem('availability', JSON.stringify(appState.availability));
-                }
-                
-                alert('Your availability has been reset.');
-                calculateResults();
-            }
-        }
-        function calculateResults() {
-            const resultCells = document.querySelectorAll('#result-grid .grid-cell');
-            const totalMembers = appState.members.length;
-            
-            if (totalMembers === 0) {
-                return;
-            }
-            
-            resultCells.forEach(cell => {
-                const timeSlot = cell.dataset.time;
-                let count = 0;
-                
-                // Get list of available members for this timeslot
-                const availableMembers = [];
-                appState.members.forEach(memberName => {
-                    if (appState.availability[memberName] && appState.availability[memberName].includes(timeSlot)) {
-                        availableMembers.push(memberName);
-                        count++;
-                    }
-                });
-                
-                // Clear the cell content first
-                cell.innerHTML = '';
-                
-                // Add appropriate heat class
-                cell.className = 'grid-cell';
-                if (count === 0) {
-                    cell.classList.add('heat-0');
-                } else if (count === totalMembers) {
-                    cell.classList.add('heat-max');
-                } else if (count >= 5) {
-                    cell.classList.add('heat-5');
-                } else {
-                    cell.classList.add(`heat-${count}`);
-                }
-                
-                // Add count text and tooltip for cells with members
-                if (count > 0) {
-                    // Create a span for the count
-                    const countSpan = document.createElement('span');
-                    countSpan.textContent = count;
-                    cell.appendChild(countSpan);
-                    
-                    // Create tooltip div
-                    const tooltip = document.createElement('div');
-                    tooltip.className = 'tooltip';
-                    tooltip.innerHTML = '<strong>Available:</strong><br>' + availableMembers.join('<br>');
-                    cell.appendChild(tooltip);
-                    
-                    // Add click handler for mobile (toggle tooltip visibility)
-                    cell.addEventListener('click', function(e) {
-                        const tooltipEl = this.querySelector('.tooltip');
-                        if (tooltipEl) {
-                            // Hide all other tooltips first
-                            document.querySelectorAll('.tooltip.visible').forEach(t => {
-                                if (t !== tooltipEl) t.classList.remove('visible');
-                            });
-                            
-                            tooltipEl.classList.toggle('visible');
-                            e.stopPropagation(); // Prevent body click from immediately closing it
-                        }
-                    });
-                }
-            });
-            
-            // Add a click handler to the document body to close any open tooltips
-            document.body.addEventListener('click', function() {
-                document.querySelectorAll('.tooltip.visible').forEach(t => {
-                    t.classList.remove('visible');
-                });
-            });
-            
-            // Update legend for all members
-            const allMembersLegend = document.querySelector('.legend-item:last-child span');
-            allMembersLegend.textContent = `All Members (${totalMembers})`;
-        }
-        
-        // Copy shareable link
-        function copyShareableLink() {
-            const data = {
-                groupName: appState.groupName,
-                members: appState.members,
-                availability: appState.availability
-            };
-            
-            const shareData = btoa(JSON.stringify(data));
-            const shareUrl = `${window.location.href.split('?')[0]}?share=${shareData}`;
-            
-            navigator.clipboard.writeText(shareUrl)
-                .then(() => {
-                    alert('Shareable link copied to clipboard! Share this with your group members.');
-                })
-                .catch(err => {
-                    console.error('Could not copy text: ', err);
-                    alert('Failed to copy link. Please try again.');
-                });
-        }
-        
-        // Export as image (simplified version - just alerts)
-        function exportAsImage() {
-            alert('This feature would normally save the schedule as an image. For a full implementation, you would need to add html2canvas or a similar library.');
-        }
-        
-        // Check for shared data in URL
-        function checkForSharedData() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const shareData = urlParams.get('share');
-            
-            if (shareData) {
-                try {
-                    const decodedData = JSON.parse(atob(shareData));
-                    
-                    if (confirm(`Do you want to load the shared "${decodedData.groupName}" group data?`)) {
-                        // Merge with local data or replace completely
-                        appState.groupName = decodedData.groupName;
-                        appState.members = decodedData.members;
-                        
-                        // Merge availability data
-                        const mergedAvailability = {...appState.availability, ...decodedData.availability};
-                        appState.availability = mergedAvailability;
-                        
-                        // Save to localStorage
-                        localStorage.setItem('groupName', appState.groupName);
-                        localStorage.setItem('members', JSON.stringify(appState.members));
-                        localStorage.setItem('availability', JSON.stringify(appState.availability));
-                        
-                        // Reload UI
-                        loadGroupInfo();
-                        loadMembers();
-                        loadAvailability();
-                        calculateResults();
-                        
-                        alert('Shared data loaded successfully!');
-                    }
-                } catch (error) {
-                    console.error('Error loading shared data:', error);
-                    alert('Invalid shared data. Could not load.');
-                }
-            }
-        }
     </script>
 </body>
 </html>
