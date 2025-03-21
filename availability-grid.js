@@ -8,7 +8,7 @@ function initializeAvailabilityGrid() {
     resultGrid.innerHTML = '';
 
     // Create days header based on Wednesday reset
-    const dayNames = ['Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday'];
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     // Add empty header for time column
     const emptyHeader = document.createElement('div');
