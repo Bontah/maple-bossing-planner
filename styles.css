@@ -410,3 +410,49 @@ button:disabled {
         display: none; /* Hide on mobile to save space */
     }
 }
+
+.selection-mode-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.mode-toggle-btn {
+    background-color: #f1f1f1;
+    color: var(--dark);
+    border: 1px solid #ddd;
+    padding: 5px 10px;
+    border-radius: 4px;
+    margin-right: 10px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.mode-toggle-btn:hover {
+    background-color: var(--primary);
+    color: white;
+}
+
+.selection-mode-info {
+    font-size: 0.8rem;
+    color: #666;
+}
+
+/* Cursor style for drag selection mode */
+.drag-selection-mode .grid-cell {
+    cursor: crosshair;
+}
+
+/* Add a pulsing effect to the toggle button when in drag mode */
+@keyframes pulse-border {
+    0% { border-color: var(--primary); }
+    50% { border-color: var(--secondary); }
+    100% { border-color: var(--primary); }
+}
+
+.drag-selection-mode ~ .selection-mode-container .mode-toggle-btn {
+    background-color: #e8f0ff;
+    animation: pulse-border 2s infinite;
+    border-width: 2px;
+}

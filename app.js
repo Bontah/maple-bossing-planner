@@ -112,6 +112,9 @@ function setupEventListeners() {
     document.getElementById('reset-all-availability').addEventListener('click', resetAllAvailability);
     document.getElementById('new-group').addEventListener('click', createNewGroup);
 
+    // Add the toggle selection mode button event listener
+    document.getElementById('toggle-selection-mode').addEventListener('click', toggleSelectionMode);
+
     // Add enter key event for join group input
     document.getElementById('group-id-input').addEventListener('keyup', function(event) {
         if (event.key === 'Enter') {

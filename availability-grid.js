@@ -1,3 +1,6 @@
+// Global selection mode state
+let selectionMode = 'click'; // 'click' or 'drag'
+
 // Initialize availability grid with MapleStory's Wednesday reset
 function initializeAvailabilityGrid() {
     const grid = document.getElementById('availability-grid');
@@ -30,7 +33,7 @@ function initializeAvailabilityGrid() {
     let selectionState = null;
 
     function startSelection(e) {
-        if (e.target.classList.contains('grid-cell')) {
+        if (selectionMode === 'drag' && e.target.classList.contains('grid-cell')) {
             isSelecting = true;
             selectionState = !e.target.classList.contains('selected');
             toggleCellSelection(e.target, selectionState);
@@ -38,7 +41,7 @@ function initializeAvailabilityGrid() {
     }
 
     function continueSelection(e) {
-        if (isSelecting && e.target.classList.contains('grid-cell')) {
+        if (selectionMode === 'drag' && isSelecting && e.target.classList.contains('grid-cell')) {
             toggleCellSelection(e.target, selectionState);
         }
     }
@@ -97,8 +100,11 @@ function initializeAvailabilityGrid() {
 
 // Toggle time slot selection
 function toggleTimeSlot(e) {
-    const cell = e.target;
-    toggleCellSelection(cell);
+    // If we're in click mode, or if it's a direct click in drag mode
+    if (selectionMode === 'click' || (selectionMode === 'drag' && !isSelecting)) {
+        const cell = e.target;
+        toggleCellSelection(cell);
+    }
 }
 
 // Helper function to toggle cell selection
@@ -111,6 +117,30 @@ function toggleCellSelection(cell, forceState = null) {
         }
     } else {
         cell.classList.toggle('selected');
+    }
+}
+
+// Add a function to toggle the selection mode
+function toggleSelectionMode() {
+    selectionMode = selectionMode === 'click' ? 'drag' : 'click';
+
+    // Update button text
+    const toggleButton = document.getElementById('toggle-selection-mode');
+    if (toggleButton) {
+        toggleButton.textContent = selectionMode === 'click' ? 'Mode: Click' : 'Mode: Drag';
+        toggleButton.setAttribute('title', selectionMode === 'click' ?
+            'Click to switch to drag selection mode' :
+            'Click to switch to single click mode');
+    }
+
+    // Update cursor style
+    const grid = document.getElementById('availability-grid');
+    if (grid) {
+        if (selectionMode === 'drag') {
+            grid.classList.add('drag-selection-mode');
+        } else {
+            grid.classList.remove('drag-selection-mode');
+        }
     }
 }
 
