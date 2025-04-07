@@ -4,6 +4,7 @@ const appState = {
     yourName: localStorage.getItem('yourName') || '',
     members: JSON.parse(localStorage.getItem('members') || '[]'),
     availability: JSON.parse(localStorage.getItem('availability') || '{}'),
+    lastUpdatedTimestamps: JSON.parse(localStorage.getItem('lastUpdatedTimestamps') || '{}'),
     timezone: localStorage.getItem('timezone') || '0',
     groupId: localStorage.getItem('groupId') || '',
     isFirebaseInitialized: false,

@@ -144,7 +144,7 @@ function toggleSelectionMode() {
     }
 }
 
-// Fixed save availability to update Firebase after saving locally
+// Updated save availability to track last updated timestamp
 function saveAvailability() {
     if (!appState.yourName) {
         alert('Please set your name in the Group Setup tab first.');
@@ -157,6 +157,14 @@ function saveAvailability() {
     // Update local storage
     appState.availability[appState.yourName] = availabilityData;
     localStorage.setItem('availability', JSON.stringify(appState.availability));
+
+    // Update timestamps
+    const currentTime = Date.now();
+    if (!appState.lastUpdatedTimestamps) {
+        appState.lastUpdatedTimestamps = {};
+    }
+    appState.lastUpdatedTimestamps[appState.yourName] = currentTime;
+    localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
 
     // Update Firebase if connected
     if (appState.isFirebaseInitialized && appState.groupId) {
@@ -172,6 +180,7 @@ function saveAvailability() {
     }
 
     calculateResults();
+    updateLastUpdatedInfo(); // Update the UI with timestamp info
 }
 
 // Load availability
@@ -210,6 +219,14 @@ function resetAvailability() {
             appState.availability[appState.yourName] = [];
             localStorage.setItem('availability', JSON.stringify(appState.availability));
 
+            // Update timestamps when resetting
+            const currentTime = Date.now();
+            if (!appState.lastUpdatedTimestamps) {
+                appState.lastUpdatedTimestamps = {};
+            }
+            appState.lastUpdatedTimestamps[appState.yourName] = currentTime;
+            localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
+
             // Update Firebase if connected
             if (appState.isFirebaseInitialized && appState.groupId) {
                 updateAvailabilityInFirebase()
@@ -225,10 +242,11 @@ function resetAvailability() {
         }
 
         calculateResults();
+        updateLastUpdatedInfo(); // Update the UI with timestamp info
     }
 }
 
-// Enhanced function to calculate results with better tooltips
+// Enhanced function to calculate results with better tooltips and last updated info
 function calculateResults() {
     const resultCells = document.querySelectorAll('#result-grid .grid-cell');
     const totalMembers = appState.members.length;
@@ -291,18 +309,42 @@ function calculateResults() {
             // Add time information to tooltip
             tooltip.innerHTML = `<strong>${dayName} at ${timeString}</strong><br>`;
             tooltip.innerHTML += `<strong>${count}/${totalMembers} members available:</strong><br>`;
-            tooltip.innerHTML += availableMembers.map(member =>
-                member === appState.yourName ? `<span style="font-weight: bold;">${member} (you)</span>` : member
-            ).join('<br>');
+
+            // Add members with their last updated time
+            availableMembers.forEach(member => {
+                let memberHTML = member === appState.yourName ?
+                    `<span style="font-weight: bold;">${member} (you)</span>` :
+                    member;
+
+                // Add last updated info if available
+                if (appState.lastUpdatedTimestamps && appState.lastUpdatedTimestamps[member]) {
+                    const lastUpdated = new Date(appState.lastUpdatedTimestamps[member]);
+                    const formattedDate = lastUpdated.toLocaleDateString();
+                    memberHTML += ` <span style="font-size: 0.8em; color: #666;">(updated: ${formattedDate})</span>`;
+                }
+
+                tooltip.innerHTML += memberHTML + '<br>';
+            });
 
             // Add unavailable members if not everyone is available
             if (count < totalMembers) {
                 const unavailableMembers = appState.members.filter(member => !availableMembers.includes(member));
                 if (unavailableMembers.length > 0) {
                     tooltip.innerHTML += '<br><br><strong>Not available:</strong><br>';
-                    tooltip.innerHTML += unavailableMembers.map(member =>
-                        member === appState.yourName ? `<span style="color: #999;">${member} (you)</span>` : `<span style="color: #999;">${member}</span>`
-                    ).join('<br>');
+                    unavailableMembers.forEach(member => {
+                        let memberHTML = member === appState.yourName ?
+                            `<span style="color: #999;">${member} (you)</span>` :
+                            `<span style="color: #999;">${member}</span>`;
+
+                        // Add last updated info if available
+                        if (appState.lastUpdatedTimestamps && appState.lastUpdatedTimestamps[member]) {
+                            const lastUpdated = new Date(appState.lastUpdatedTimestamps[member]);
+                            const formattedDate = lastUpdated.toLocaleDateString();
+                            memberHTML += ` <span style="font-size: 0.8em; color: #999;">(updated: ${formattedDate})</span>`;
+                        }
+
+                        tooltip.innerHTML += memberHTML + '<br>';
+                    });
                 }
             }
 

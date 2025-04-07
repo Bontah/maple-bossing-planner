@@ -26,7 +26,7 @@ function initializeFirebase() {
     }
 }
 
-// Improved real-time sync with better data handling
+// Improved real-time sync with better data handling and lastUpdatedTimestamps support
 function setupRealtimeSync() {
     if (!appState.groupId) return Promise.resolve();
 
@@ -61,10 +61,18 @@ function setupRealtimeSync() {
             localStorage.setItem('availability', JSON.stringify(appState.availability));
         }
 
+        // Update lastUpdatedTimestamps if changed
+        if (data.lastUpdatedTimestamps &&
+            JSON.stringify(data.lastUpdatedTimestamps) !== JSON.stringify(appState.lastUpdatedTimestamps)) {
+            appState.lastUpdatedTimestamps = data.lastUpdatedTimestamps;
+            localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
+        }
+
         // Update UI
         loadMembers();
         loadAvailability();
         calculateResults();
+        updateLastUpdatedInfo(); // New function to update the UI with timestamp info
 
         // Show sync status if on results tab
         if (document.querySelector('.tab[data-tab="results"]').classList.contains('active')) {
@@ -93,6 +101,7 @@ function saveGroupToFirebase() {
         name: appState.groupName,
         members: appState.members,
         availability: appState.availability,
+        lastUpdatedTimestamps: appState.lastUpdatedTimestamps || {}, // Include timestamps
         leader: appState.yourName, // Store leader info
         isLeaderActive: appState.isGroupLeader,
         lastUpdated: firebase.database.ServerValue.TIMESTAMP
@@ -130,7 +139,7 @@ function updateMembersInFirebase() {
     });
 }
 
-// Update availability in Firebase with proper error handling
+// Update availability in Firebase with proper error handling and user timestamps
 function updateAvailabilityInFirebase() {
     if (!appState.isFirebaseInitialized || !appState.groupId) {
         console.warn("Firebase not initialized or no group ID");
@@ -140,11 +149,29 @@ function updateAvailabilityInFirebase() {
     const groupRef = firebase.database().ref(`groups/${appState.groupId}`);
     console.log("Updating availability in Firebase");
 
-    // Update both availability and the lastUpdated timestamp
-    return groupRef.update({
+    // Get current time
+    const currentTime = Date.now();
+
+    // Create an update object with availability
+    const updateData = {
         availability: appState.availability,
         lastUpdated: firebase.database.ServerValue.TIMESTAMP
-    }).then(() => {
+    };
+
+    // Also store the last update timestamp for this specific user
+    if (!appState.lastUpdatedTimestamps) {
+        appState.lastUpdatedTimestamps = {};
+    }
+
+    // Update timestamps locally
+    appState.lastUpdatedTimestamps[appState.yourName] = currentTime;
+    localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
+
+    // Update in Firebase
+    updateData[`lastUpdatedTimestamps/${appState.yourName}`] = currentTime;
+
+    // Update both availability and the lastUpdated timestamp
+    return groupRef.update(updateData).then(() => {
         console.log("Availability updated successfully in Firebase");
         return Promise.resolve();
     }).catch(error => {

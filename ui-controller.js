@@ -5,6 +5,7 @@ function createNewGroup() {
     appState.groupName = '';
     appState.members = [];
     appState.availability = {};
+    appState.lastUpdatedTimestamps = {}; // Clear timestamps
     appState.isGroupLeader = true;
 
     // Update localStorage
@@ -12,6 +13,7 @@ function createNewGroup() {
     localStorage.setItem('groupName', '');
     localStorage.setItem('members', JSON.stringify([]));
     localStorage.setItem('availability', JSON.stringify({}));
+    localStorage.setItem('lastUpdatedTimestamps', JSON.stringify({}));
     localStorage.setItem('isGroupLeader', 'true');
 
     // Update UI
@@ -28,7 +30,9 @@ function createNewGroup() {
 
     // Display message to user
     alert('Ready to create a new group! Enter a group name and your character name, then click "Save Group Info".');
-}// Load group info
+}
+
+// Load group info
 function loadGroupInfo() {
     document.getElementById('group-name').value = appState.groupName;
     document.getElementById('your-name').value = appState.yourName;
@@ -66,6 +70,14 @@ function saveGroupInfo() {
                 appState.members.push(yourName);
                 localStorage.setItem('members', JSON.stringify(appState.members));
             }
+
+            // Set initial timestamp for your update
+            const currentTime = Date.now();
+            if (!appState.lastUpdatedTimestamps) {
+                appState.lastUpdatedTimestamps = {};
+            }
+            appState.lastUpdatedTimestamps[yourName] = currentTime;
+            localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
 
             // Create initial group in Firebase with leader info
             saveGroupToFirebase().then(() => {
@@ -271,10 +283,12 @@ function switchGroup() {
             // Update app state with Firebase data
             appState.members = data.members || [];
             appState.availability = data.availability || {};
+            appState.lastUpdatedTimestamps = data.lastUpdatedTimestamps || {};
 
             // Update localStorage
             localStorage.setItem('members', JSON.stringify(appState.members));
             localStorage.setItem('availability', JSON.stringify(appState.availability));
+            localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
 
             // Update UI
             updateGroupIdDisplay();
@@ -282,6 +296,7 @@ function switchGroup() {
             loadAvailability();
             calculateResults();
             showLeaderControls();
+            updateLastUpdatedInfo();
 
             // Set up real-time sync
             setupRealtimeSync();
@@ -322,10 +337,15 @@ function leaveGroup() {
                 const updatedAvailability = {...data.availability};
                 delete updatedAvailability[appState.yourName];
 
+                // Remove your timestamp
+                const updatedTimestamps = {...data.lastUpdatedTimestamps};
+                delete updatedTimestamps[appState.yourName];
+
                 // Update Firebase
                 return groupRef.update({
                     members: updatedMembers,
                     availability: updatedAvailability,
+                    lastUpdatedTimestamps: updatedTimestamps,
                     lastUpdated: firebase.database.ServerValue.TIMESTAMP
                 });
             })
@@ -414,20 +434,31 @@ function resetAllAvailability() {
             emptyAvailability[member] = [];
         });
 
+        // Update timestamps to now for everyone
+        const currentTime = Date.now();
+        const resetTimestamps = {};
+        appState.members.forEach(member => {
+            resetTimestamps[member] = currentTime;
+        });
+
         // Update Firebase
         groupRef.update({
             availability: emptyAvailability,
+            lastUpdatedTimestamps: resetTimestamps,
             lastUpdated: firebase.database.ServerValue.TIMESTAMP,
             lastReset: firebase.database.ServerValue.TIMESTAMP
         })
             .then(() => {
                 // Update local state
                 appState.availability = emptyAvailability;
+                appState.lastUpdatedTimestamps = resetTimestamps;
                 localStorage.setItem('availability', JSON.stringify(appState.availability));
+                localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
 
                 // Update UI
                 loadAvailability();
                 calculateResults();
+                updateLastUpdatedInfo();
 
                 // Clear selection in the grid
                 document.querySelectorAll('#availability-grid .grid-cell.selected').forEach(cell => {
@@ -445,7 +476,7 @@ function resetAllAvailability() {
     }
 }
 
-// Load members
+// Enhanced load members function to show last updated times
 function loadMembers() {
     const memberList = document.getElementById('member-list');
     memberList.innerHTML = '';
@@ -465,6 +496,66 @@ function loadMembers() {
         memberElement.appendChild(nameSpan);
         memberElement.appendChild(removeButton);
         memberList.appendChild(memberElement);
+    });
+
+    // Update last updated information
+    updateLastUpdatedInfo();
+}
+
+// New function to update and display timestamp information
+function updateLastUpdatedInfo() {
+    const memberList = document.getElementById('member-list');
+    if (!memberList) return;
+
+    // Get all member elements
+    const memberElements = memberList.querySelectorAll('.member');
+
+    memberElements.forEach(memberEl => {
+        const nameSpan = memberEl.querySelector('span');
+        if (!nameSpan) return;
+
+        const memberName = nameSpan.textContent;
+
+        // Remove existing timestamp if any
+        const existingTimestamp = memberEl.querySelector('.update-timestamp');
+        if (existingTimestamp) {
+            existingTimestamp.remove();
+        }
+
+        // Create timestamp element
+        const timestampEl = document.createElement('div');
+        timestampEl.className = 'update-timestamp';
+
+        // Check if we have a timestamp for this member
+        if (appState.lastUpdatedTimestamps && appState.lastUpdatedTimestamps[memberName]) {
+            const lastUpdated = new Date(appState.lastUpdatedTimestamps[memberName]);
+            const now = new Date();
+            const diffDays = Math.floor((now - lastUpdated) / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 0) {
+                // Today
+                timestampEl.textContent = `Updated: Today at ${lastUpdated.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+                timestampEl.className = 'update-timestamp recent';
+            } else if (diffDays === 1) {
+                // Yesterday
+                timestampEl.textContent = `Updated: Yesterday`;
+                timestampEl.className = 'update-timestamp recent';
+            } else if (diffDays < 7) {
+                // This week
+                timestampEl.textContent = `Updated: ${diffDays} days ago`;
+                timestampEl.className = 'update-timestamp warning';
+            } else {
+                // Over a week
+                timestampEl.textContent = `Updated: ${diffDays} days ago`;
+                timestampEl.className = 'update-timestamp outdated';
+            }
+        } else {
+            timestampEl.textContent = 'Not updated yet';
+            timestampEl.className = 'update-timestamp outdated';
+        }
+
+        // Insert after the name span
+        nameSpan.after(timestampEl);
     });
 }
 
@@ -524,17 +615,45 @@ function removeMember(memberName) {
         localStorage.setItem('availability', JSON.stringify(appState.availability));
     }
 
+    // Remove timestamp data for this member
+    if (appState.lastUpdatedTimestamps && appState.lastUpdatedTimestamps[memberName]) {
+        delete appState.lastUpdatedTimestamps[memberName];
+        localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
+    }
+
     // Update UI
     loadMembers();
     calculateResults();
 
     // Update Firebase if connected
     if (appState.isFirebaseInitialized && appState.groupId) {
-        // Update both members and availability in Firebase
-        Promise.all([
-            updateMembersInFirebase(),
-            updateAvailabilityInFirebase()
-        ])
+        // Get reference to the group
+        const groupRef = firebase.database().ref(`groups/${appState.groupId}`);
+
+        // Update Firebase
+        groupRef.once('value')
+            .then((snapshot) => {
+                const data = snapshot.val() || {};
+
+                // Remove from members
+                const updatedMembers = (data.members || []).filter(m => m !== memberName);
+
+                // Remove from availability
+                const updatedAvailability = {...(data.availability || {})};
+                delete updatedAvailability[memberName];
+
+                // Remove from timestamps
+                const updatedTimestamps = {...(data.lastUpdatedTimestamps || {})};
+                delete updatedTimestamps[memberName];
+
+                // Update in Firebase
+                return groupRef.update({
+                    members: updatedMembers,
+                    availability: updatedAvailability,
+                    lastUpdatedTimestamps: updatedTimestamps,
+                    lastUpdated: firebase.database.ServerValue.TIMESTAMP
+                });
+            })
             .then(() => {
                 console.log(`Member "${memberName}" removed and synchronized.`);
             })
@@ -646,6 +765,10 @@ function joinGroup() {
                 // Update members and availability
                 appState.members = data.members || [];
 
+                // Update timestamps
+                appState.lastUpdatedTimestamps = data.lastUpdatedTimestamps || {};
+                localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
+
                 // Check if joining as leader
                 const isLeader = (data.leader === appState.yourName) ||
                     (!data.leader && data.members.length === 0);
@@ -683,6 +806,7 @@ function joinGroup() {
                 updateGroupIdDisplay();
                 updateGroupSelector();
                 showLeaderControls();
+                updateLastUpdatedInfo();
 
                 // Set up real-time sync
                 setupRealtimeSync();
@@ -707,7 +831,7 @@ function joinGroup() {
         });
 }
 
-// Enhanced check for shared data
+// Enhanced check for shared data with timestamp support
 function checkForSharedData() {
     const urlParams = new URLSearchParams(window.location.search);
 
@@ -756,12 +880,16 @@ function checkForSharedData() {
                     appState.availability = data.availability || {};
                     localStorage.setItem('availability', JSON.stringify(appState.availability));
 
+                    appState.lastUpdatedTimestamps = data.lastUpdatedTimestamps || {};
+                    localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
+
                     // Reload UI
                     loadGroupInfo();
                     loadMembers();
                     loadAvailability();
                     calculateResults();
                     updateGroupIdDisplay();
+                    updateLastUpdatedInfo();
 
                     // Set up real-time sync
                     setupRealtimeSync();
@@ -802,16 +930,29 @@ function checkForSharedData() {
                 const mergedAvailability = {...appState.availability, ...decodedData.availability};
                 appState.availability = mergedAvailability;
 
+                // Initialize timestamps if they don't exist
+                if (!appState.lastUpdatedTimestamps) {
+                    appState.lastUpdatedTimestamps = {};
+                }
+
+                // Set current timestamp for all members from the shared data
+                const currentTime = Date.now();
+                decodedData.members.forEach(member => {
+                    appState.lastUpdatedTimestamps[member] = currentTime;
+                });
+
                 // Save to localStorage
                 localStorage.setItem('groupName', appState.groupName);
                 localStorage.setItem('members', JSON.stringify(appState.members));
                 localStorage.setItem('availability', JSON.stringify(appState.availability));
+                localStorage.setItem('lastUpdatedTimestamps', JSON.stringify(appState.lastUpdatedTimestamps));
 
                 // Reload UI
                 loadGroupInfo();
                 loadMembers();
                 loadAvailability();
                 calculateResults();
+                updateLastUpdatedInfo();
 
                 alert('Shared data loaded successfully! Consider setting up real-time synchronization in the Group Setup tab.');
             }
